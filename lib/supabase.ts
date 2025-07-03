@@ -57,8 +57,7 @@ export interface ContentView {
   viewed_at: string
   user_agent?: string
   access_token: string
-  created_at: string,
-  protected_content_id: string
+  created_at: string
 }
 
 // Database operations
@@ -173,19 +172,6 @@ export class SupabaseOperations {
         // Continue anyway with a placeholder
       }
 
-      // Increment view count for the content
-      const {  data: protectedContentViewSingle,  error: selectProtectedContentError } = await this.client
-        .from("protected_content")
-        .select("id, email, view_count")
-        .eq("uuid", data.contentUuid)
-        .limit(1)
-        .single()
-
-      if (selectProtectedContentError || !protectedContentViewSingle) {
-        console.error("Could not find protected content for content view")
-        // Continue anyway with a placeholder
-      }
-
       // Insert content view record
       const { error: insertError } = await this.client.from("content_views").insert({
         content_uuid: data.contentUuid,
@@ -195,22 +181,18 @@ export class SupabaseOperations {
         viewed_at: new Date().toISOString(),
         user_agent: data.userAgent,
         access_token: data.accessToken.substring(0, 16), // Store partial token for tracking
-        protected_content_id: protectedContentViewSingle?.id,
       })
 
       if (insertError) {
         console.error("Supabase content view insert error:", insertError)
         return { success: false, error: insertError.message }
       }
-      let newCount : number = 0
-      if (protectedContentViewSingle) 
-        newCount = protectedContentViewSingle.view_count + 1
 
       // Increment view count for the content
       const { error: updateError } = await this.client
         .from("protected_content")
         .update({
-          view_count: newCount,
+          view_count: this.client.raw("view_count + 1"),
           updated_at: new Date().toISOString(),
         })
         .eq("uuid", data.contentUuid)
@@ -611,6 +593,175 @@ export class SupabaseOperations {
       return { success: true, data: activities.slice(0, 10) }
     } catch (error) {
       console.error("Failed to get recent activity:", error)
+      return { success: false, error: "Database operation failed" }
+    }
+  }
+
+  // Get session statistics
+  async getSessionStats(): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const todayISO = today.toISOString()
+
+      const [{ count: activeSessions }, { count: verifiedToday }, { data: allSessions }, { data: uniqueIPs }] =
+        await Promise.all([
+          this.client
+            .from("user_sessions")
+            .select("*", { count: "exact", head: true })
+            .is("code_verified_at", null)
+            .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+          this.client
+            .from("user_sessions")
+            .select("*", { count: "exact", head: true })
+            .not("code_verified_at", "is", null)
+            .gte("code_verified_at", todayISO),
+          this.client.from("user_sessions").select("created_at, code_verified_at").not("code_verified_at", "is", null),
+          this.client.from("user_sessions").select("ip_address").not("ip_address", "is", null),
+        ])
+
+      // Calculate average duration
+      let avgDuration = 0
+      if (allSessions && allSessions.length > 0) {
+        const durations = allSessions
+          .filter((s) => s.code_verified_at)
+          .map((s) => new Date(s.code_verified_at).getTime() - new Date(s.created_at).getTime())
+
+        if (durations.length > 0) {
+          avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length
+        }
+      }
+
+      const uniqueIPCount = new Set(uniqueIPs?.map((item) => item.ip_address)).size
+
+      return {
+        success: true,
+        data: {
+          activeSessions: activeSessions || 0,
+          verifiedToday: verifiedToday || 0,
+          avgDuration: avgDuration,
+          uniqueIPs: uniqueIPCount,
+        },
+      }
+    } catch (error) {
+      console.error("Failed to get session stats:", error)
+      return { success: false, error: "Database operation failed" }
+    }
+  }
+
+  // Get all sessions for admin
+  async getAllSessions(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const { data, error } = await this.client
+        .from("user_sessions")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50)
+
+      if (error) {
+        console.error("Supabase sessions error:", error)
+        return { success: false, error: error.message }
+      }
+
+      // Add status to each session
+      const sessionsWithStatus = data?.map((session) => {
+        let status = "pending"
+        if (session.code_verified_at) {
+          status = "verified"
+        } else if (new Date(session.created_at) < new Date(Date.now() - 10 * 60 * 1000)) {
+          // Consider sessions older than 10 minutes as expired if not verified
+          status = "expired"
+        }
+
+        return {
+          ...session,
+          status,
+        }
+      })
+
+      return { success: true, data: sessionsWithStatus }
+    } catch (error) {
+      console.error("Failed to get all sessions:", error)
+      return { success: false, error: "Database operation failed" }
+    }
+  }
+
+  // Get view statistics
+  async getViewStats(): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const todayISO = today.toISOString()
+
+      const [{ count: totalViews }, { count: todayViews }, { data: contentViews }, { data: allViews }] =
+        await Promise.all([
+          this.client.from("content_views").select("*", { count: "exact", head: true }),
+          this.client.from("content_views").select("*", { count: "exact", head: true }).gte("viewed_at", todayISO),
+          this.client.from("content_views").select(`
+          content_uuid,
+          protected_content!inner(title)
+        `),
+          this.client.from("content_views").select("viewed_at"),
+        ])
+
+      // Find most viewed content
+      let mostViewed = ""
+      if (contentViews && contentViews.length > 0) {
+        const viewCounts: { [key: string]: number } = {}
+        contentViews.forEach((view) => {
+          const title = view.protected_content?.title || view.content_uuid
+          viewCounts[title] = (viewCounts[title] || 0) + 1
+        })
+
+        const sortedContent = Object.entries(viewCounts).sort(([, a], [, b]) => b - a)
+        if (sortedContent.length > 0) {
+          mostViewed = sortedContent[0][0]
+        }
+      }
+
+      // Calculate average view time (mock for now - would need session tracking)
+      const avgViewTime = allViews && allViews.length > 0 ? 240 : 0 // 4 minutes average
+
+      return {
+        success: true,
+        data: {
+          totalViews: totalViews || 0,
+          todayViews: todayViews || 0,
+          avgViewTime,
+          mostViewed,
+        },
+      }
+    } catch (error) {
+      console.error("Failed to get view stats:", error)
+      return { success: false, error: "Database operation failed" }
+    }
+  }
+
+  // Get all page views for admin
+  async getAllPageViews(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const { data, error } = await this.client
+        .from("content_views")
+        .select(`
+        *,
+        protected_content!inner(title)
+      `)
+        .order("viewed_at", { ascending: false })
+        .limit(50)
+
+      if (error) {
+        console.error("Supabase page views error:", error)
+        return { success: false, error: error.message }
+      }
+
+      const viewsWithTitle = data?.map((view) => ({
+        ...view,
+        content_title: view.protected_content?.title || "Unknown Content",
+      }))
+
+      return { success: true, data: viewsWithTitle }
+    } catch (error) {
+      console.error("Failed to get all page views:", error)
       return { success: false, error: "Database operation failed" }
     }
   }
