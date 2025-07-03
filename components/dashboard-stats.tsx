@@ -3,7 +3,7 @@ import { Users, FileText, Eye, Shield, TrendingUp, Clock } from "lucide-react"
 
 async function getStats() {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/admin/stats`, {
+    const response = await fetch('/api/admin/stats', {
       cache: "no-store",
     })
     if (!response.ok) throw new Error("Failed to fetch stats")
