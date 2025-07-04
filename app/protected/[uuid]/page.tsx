@@ -102,7 +102,6 @@ export default function ProtectedContentPage() {
       const handleKeyDown = (e: KeyboardEvent) => {
         if (
           e.key === "F12" ||
-          e.key === "PrtScn" || e.key === "PrintScreen" || e.key === "Snapshot" || e.key === "F13" ||
           (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J")) ||
           (e.ctrlKey && (e.key === "u" || e.key === "U")) ||
           (e.ctrlKey && (e.key === "s" || e.key === "S")) ||
@@ -110,8 +109,8 @@ export default function ProtectedContentPage() {
           (e.ctrlKey && (e.key === "c" || e.key === "C")) ||
           (e.ctrlKey && (e.key === "p" || e.key === "P"))
         ) {
-          e.preventDefault();
-          return false;
+          e.preventDefault()
+          return false
         }
       }
 

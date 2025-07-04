@@ -22,7 +22,7 @@ export async function GET() {
       ...result.data,
       // Only add mock data if database returns 0 values
       todayViews: result.data?.pageViews || result.data?.contentViews || 0,
-      avgSessionTime: result.data?.verifiedSessions ? (result.data?.verifiedSessions > 0 ? 180 : 0) : 0, // 3 minutes average if we have sessions
+      avgSessionTime: result.data?.verifiedSessions > 0 ? 180 : 0, // 3 minutes average if we have sessions
     }
 
     return NextResponse.json(stats)

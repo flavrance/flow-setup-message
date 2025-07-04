@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS content_views (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     content_uuid TEXT NOT NULL,
     user_session_id UUID REFERENCES user_sessions(id) ON DELETE CASCADE,
-    protected_content_id UUID REFERENCES protected_content(id) ON DELETE CASCADE,
     ip_address TEXT NOT NULL,
     email TEXT NOT NULL,
     viewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

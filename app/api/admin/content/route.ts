@@ -43,8 +43,8 @@ export async function POST(request: NextRequest) {
     const result = await supabaseOps.createProtectedContent({
       uuid,
       title,
-      content_html,
-      expires_at: expires_at || null,
+      contentHtml: content_html,
+      expiresAt: expires_at || null,
       metadata: { created_by: userId, is_active: is_active ?? true },
     })
 

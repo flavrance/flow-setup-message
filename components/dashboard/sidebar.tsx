@@ -3,7 +3,21 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, FileText, Users, BarChart3, Settings, Shield, Eye, Plus, List } from "lucide-react"
+import {
+  LayoutDashboard,
+  FileText,
+  Users,
+  BarChart3,
+  Settings,
+  Shield,
+  Eye,
+  Plus,
+  List,
+  Mail,
+  TrendingUp,
+  UserCheck,
+  Lock,
+} from "lucide-react"
 
 const navigation = [
   {
@@ -35,6 +49,38 @@ const navigation = [
         name: "Create Content",
         href: "/dashboard/content/create",
         icon: Plus,
+      },
+    ],
+  },
+  {
+    name: "Email Campaigns",
+    href: "/dashboard/campaigns",
+    icon: Mail,
+    children: [
+      {
+        name: "All Campaigns",
+        href: "/dashboard/campaigns",
+        icon: List,
+      },
+      {
+        name: "Create Campaign",
+        href: "/dashboard/campaigns/create",
+        icon: Plus,
+      },
+      {
+        name: "Analytics",
+        href: "/dashboard/campaigns/analytics",
+        icon: TrendingUp,
+      },
+      {
+        name: "Sender Aliases",
+        href: "/dashboard/campaigns/aliases",
+        icon: UserCheck,
+      },
+      {
+        name: "Credentials Manager",
+        href: "/dashboard/campaigns/credentials",
+        icon: Lock,
       },
     ],
   },
